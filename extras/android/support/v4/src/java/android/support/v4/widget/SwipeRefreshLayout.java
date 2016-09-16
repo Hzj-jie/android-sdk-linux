@@ -185,21 +185,33 @@ public class SwipeRefreshLayout extends ViewGroup implements NestedScrollingPare
                         mListener.onRefresh();
                     }
                 }
+                mCurrentTargetOffsetTop = mCircleView.getTop();
             } else {
-                mProgress.stop();
-                mCircleView.setVisibility(View.GONE);
-                setColorViewAlpha(MAX_ALPHA);
-                // Return the circle to its start position
-                if (mScale) {
-                    setAnimationProgress(0 /* animation complete and view is hidden */);
-                } else {
-                    setTargetOffsetTopAndBottom(mOriginalOffsetTop - mCurrentTargetOffsetTop,
-                            true /* requires update */);
-                }
+                reset();
             }
-            mCurrentTargetOffsetTop = mCircleView.getTop();
         }
     };
+
+    private void reset() {
+        mCircleView.clearAnimation();
+        mProgress.stop();
+        mCircleView.setVisibility(View.GONE);
+        setColorViewAlpha(MAX_ALPHA);
+        // Return the circle to its start position
+        if (mScale) {
+            setAnimationProgress(0 /* animation complete and view is hidden */);
+        } else {
+            setTargetOffsetTopAndBottom(mOriginalOffsetTop - mCurrentTargetOffsetTop,
+                    true /* requires update */);
+        }
+        mCurrentTargetOffsetTop = mCircleView.getTop();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        reset();
+    }
 
     private void setColorViewAlpha(int targetAlpha) {
         mCircleView.getBackground().setAlpha(targetAlpha);
@@ -732,7 +744,7 @@ public class SwipeRefreshLayout extends ViewGroup implements NestedScrollingPare
 
     @Override
     public boolean onStartNestedScroll(View child, View target, int nestedScrollAxes) {
-        return isEnabled() && !mReturningToStart && !mRefreshing
+        return isEnabled() && canChildScrollUp() && !mReturningToStart && !mRefreshing
                 && (nestedScrollAxes & ViewCompat.SCROLL_AXIS_VERTICAL) != 0;
     }
 
@@ -906,24 +918,26 @@ public class SwipeRefreshLayout extends ViewGroup implements NestedScrollingPare
             ViewCompat.setScaleX(mCircleView, 1f);
             ViewCompat.setScaleY(mCircleView, 1f);
         }
+
+        if (mScale) {
+            setAnimationProgress(Math.min(1f, overscrollTop / mTotalDragDistance));
+        }
         if (overscrollTop < mTotalDragDistance) {
-            if (mScale) {
-                setAnimationProgress(overscrollTop / mTotalDragDistance);
-            }
             if (mProgress.getAlpha() > STARTING_PROGRESS_ALPHA
                     && !isAnimationRunning(mAlphaStartAnimation)) {
                 // Animate the alpha
                 startProgressAlphaStartAnimation();
             }
-            float strokeStart = adjustedPercent * .8f;
-            mProgress.setStartEndTrim(0f, Math.min(MAX_PROGRESS_ANGLE, strokeStart));
-            mProgress.setArrowScale(Math.min(1f, adjustedPercent));
         } else {
             if (mProgress.getAlpha() < MAX_ALPHA && !isAnimationRunning(mAlphaMaxAnimation)) {
                 // Animate the alpha
                 startProgressAlphaMaxAnimation();
             }
         }
+        float strokeStart = adjustedPercent * .8f;
+        mProgress.setStartEndTrim(0f, Math.min(MAX_PROGRESS_ANGLE, strokeStart));
+        mProgress.setArrowScale(Math.min(1f, adjustedPercent));
+
         float rotation = (-0.25f + .4f * adjustedPercent + tensionPercent * 2) * .5f;
         mProgress.setProgressRotation(rotation);
         setTargetOffsetTopAndBottom(targetY - mCurrentTargetOffsetTop, true /* requires update */);
